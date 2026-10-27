@@ -1,60 +1,115 @@
-// Mengubah baris database menjadi objek JSON yang dipakai frontend
-import { pool } from "./db.js";
+// Mengubah baris database (kekos_database.sql) menjadi objek JSON yang dipakai frontend
 
 const list = (text) => (text ? text.split(",").map((s) => s.trim()).filter(Boolean) : []);
 
-// SELECT kos lengkap dengan harga termurah, sisa kamar, rating, dan nama pemilik
+// Titik kampus untuk menghitung jarak kos (sama dengan CAMPUS di frontend/src/lib/maps.js).
+// Jarak tidak disimpan di database dan tidak diisi pemilik, selalu dihitung dari koordinat.
+const KAMPUS = { lat: -7.3117, lng: 112.7275, nama: "Telkom University Surabaya" };
+
+function jarakMeter(a, b) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+
+function teksJarak(lat, lng) {
+  if (lat == null || lng == null) return null;
+  const m = jarakMeter(KAMPUS, { lat, lng });
+  const angka = m < 1000 ? `${Math.round(m / 50) * 50} meter` : `${(m / 1000).toFixed(1).replace(".", ",")} km`;
+  return `${angka} dari ${KAMPUS.nama}`;
+}
+
+// SELECT kos lengkap: pemilik, harga termurah per tipe kamar, sisa kamar, jumlah ulasan, fasilitas, foto
 export const KOS_SELECT = `
-  SELECT k.*, u.nama AS pemilik_nama, u.telepon AS pemilik_telepon,
-    (SELECT MIN(harga_per_bulan) FROM kamar WHERE kos_id = k.id AND aktif) AS harga_min,
-    (SELECT COALESCE(SUM(jumlah), 0) FROM kamar WHERE kos_id = k.id AND aktif) AS sisa_kamar,
-    (SELECT ROUND(AVG(rating), 1) FROM ulasan WHERE kos_id = k.id) AS rating,
-    (SELECT COUNT(*) FROM ulasan WHERE kos_id = k.id) AS jumlah_ulasan
-  FROM kos k LEFT JOIN users u ON u.id = k.pemilik_id`;
+  SELECT k.*, p.nama AS pemilik_nama, p.no_hp AS pemilik_hp,
+    (SELECT MIN(t.harga) FROM tipe_kamar t WHERE t.id_kos = k.id_kos) AS harga_min,
+    (SELECT COALESCE(SUM(t.jumlah_tersedia), 0) FROM tipe_kamar t
+      WHERE t.id_kos = k.id_kos AND t.status_ketersediaan = 'tersedia') AS sisa_kamar,
+    (SELECT COUNT(*) FROM rating r WHERE r.id_kos = k.id_kos) AS jumlah_ulasan,
+    (SELECT GROUP_CONCAT(f.nama_fasilitas ORDER BY f.id_fasilitas SEPARATOR ',')
+       FROM kos_fasilitas kf JOIN fasilitas f ON f.id_fasilitas = kf.id_fasilitas
+      WHERE kf.id_kos = k.id_kos) AS fasilitas,
+    (SELECT GROUP_CONCAT(fk.file_foto ORDER BY fk.id_foto SEPARATOR ',')
+       FROM foto_kos fk WHERE fk.id_kos = k.id_kos) AS foto
+  FROM kos k JOIN pengguna p ON p.id_pengguna = k.id_pemilik`;
 
 export function toKos(row) {
   const photos = list(row.foto);
+  const lat = row.latitude == null ? null : Number(row.latitude);
+  const lng = row.longitude == null ? null : Number(row.longitude);
   return {
-    id: row.id,
-    name: row.nama,
-    type: row.tipe,
-    area: row.area,
-    distance: row.jarak,
+    id: row.id_kos,
+    name: row.nama_kos,
+    type: row.jenis_kos,
+    distance: teksJarak(lat, lng),
     address: row.alamat,
-    lat: row.lat == null ? null : Number(row.lat),
-    lng: row.lng == null ? null : Number(row.lng),
+    lat,
+    lng,
     description: row.deskripsi,
-    totalRooms: row.jumlah_kamar,
+    totalRooms: row.banyak_kamar,
     facilities: list(row.fasilitas),
     photos,
     image: photos[0] || null,
-    status: row.status,
-    active: Boolean(row.aktif),
+    status: row.status_verifikasi,
     price: row.harga_min == null ? null : Number(row.harga_min),
     roomsLeft: Number(row.sisa_kamar || 0),
-    rating: row.rating == null ? 0 : Number(row.rating),
+    rating: Number(row.rata_rating || 0),
     reviews: Number(row.jumlah_ulasan || 0),
-    owner: { id: row.pemilik_id, name: row.pemilik_nama, phone: row.pemilik_telepon },
-    updatedAt: row.updated_at,
+    owner: { id: row.id_pemilik, name: row.pemilik_nama },
+    updatedAt: row.terakhir_diperbarui,
   };
 }
 
-export function toKamar(row) {
+// SELECT tipe kamar beserta fasilitas dan fotonya
+export const TIPE_KAMAR_SELECT = `
+  SELECT t.*,
+    (SELECT GROUP_CONCAT(f.nama_fasilitas ORDER BY f.id_fasilitas SEPARATOR ',')
+       FROM tipe_kamar_fasilitas tf JOIN fasilitas f ON f.id_fasilitas = tf.id_fasilitas
+      WHERE tf.id_tipe_kamar = t.id_tipe_kamar) AS fasilitas,
+    (SELECT GROUP_CONCAT(fk.file_foto ORDER BY fk.id_foto_kamar SEPARATOR ',')
+       FROM foto_kamar fk WHERE fk.id_tipe_kamar = t.id_tipe_kamar) AS foto
+  FROM tipe_kamar t`;
+
+export function toTipeKamar(row) {
+  const photos = list(row.foto);
   return {
-    id: row.id,
-    kosId: row.kos_id,
-    type: row.tipe,
-    price: row.harga_per_bulan,
-    available: row.jumlah,
+    id: row.id_tipe_kamar,
+    kosId: row.id_kos,
+    type: row.nama_tipe,
+    price: Number(row.harga),
+    totalRooms: row.jumlah_kamar,
+    // Tipe yang ditandai "penuh" oleh pemilik dianggap tidak tersedia
+    available: row.status_ketersediaan === "tersedia" ? row.jumlah_tersedia : 0,
+    status: row.status_ketersediaan,
     facilities: list(row.fasilitas),
     description: row.deskripsi,
-    photos: list(row.foto),
-    image: list(row.foto)[0] || null,
-    active: Boolean(row.aktif),
+    photos,
+    image: photos[0] || null,
   };
 }
 
-export async function notify(userId, judul, pesan, jenis = "info") {
-  if (!userId) return;
-  await pool.query("INSERT INTO notifikasi (user_id, jenis, judul, pesan) VALUES (?, ?, ?, ?)", [userId, jenis, judul, pesan]);
+// Jenis notifikasi di database → tampilan di dropdown notifikasi pencari
+const JENIS_NOTIFIKASI = {
+  booking_dikirim: { type: "info", title: "Booking Terkirim" },
+  booking_diterima: { type: "sukses", title: "Booking Diterima!" },
+  booking_ditolak: { type: "error", title: "Booking Ditolak" },
+  booking_baru: { type: "info", title: "Booking Baru" },
+  peringatan: { type: "peringatan", title: "Peringatan" },
+  listing_dihapus: { type: "error", title: "Listing Dihapus" },
+  log: { type: "info", title: "Log Aktivitas" },
+};
+
+export function toNotifikasi(row) {
+  const jenis = JENIS_NOTIFIKASI[row.jenis_notifikasi] || { type: "info", title: "Notifikasi" };
+  return {
+    id: row.id_notifikasi,
+    type: jenis.type,
+    title: jenis.title,
+    message: row.pesan,
+    bookingId: row.id_booking,
+    read: Boolean(row.sudah_dibaca),
+    createdAt: row.waktu_kirim,
+  };
 }

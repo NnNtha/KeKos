@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { AnimatePresence, motion } from "motion/react";
 import Navbar from "../components/Navbar.jsx";
 import KosCard from "../components/KosCard.jsx";
 import KosMap from "../components/KosMap.jsx";
 import TextRotate from "../components/ui/TextRotate.jsx";
 import InteractiveHoverButton from "../components/ui/InteractiveHoverButton.jsx";
-import SpotlightCard from "../components/ui/SpotlightCard.jsx";
 import { useApi } from "../hooks/useApi.js";
 import { useDragScroll } from "../hooks/useDragScroll.js";
 import { useScrollEffects } from "../hooks/useScrollEffects.js";
@@ -27,12 +27,12 @@ const TYPES = [
   { value: "campur", label: "Campur" },
 ];
 
-// label = teks di tombol, value = kata yang dicari di kolom fasilitas database
+// label = teks di tombol, value = nama_fasilitas di tabel fasilitas (harus sama persis)
 const FACILITIES = [
   { label: "AC", value: "AC" },
-  { label: "Kamar Mandi Dalam", value: "K. Mandi Dalam" },
+  { label: "Kamar Mandi Dalam", value: "Kamar Mandi Dalam" },
   { label: "Dapur Bersama", value: "Dapur Bersama" },
-  { label: "WiFi 100Mbps", value: "Wifi" },
+  { label: "WiFi 100Mbps", value: "WiFi" },
   { label: "Water Heater", value: "Water Heater" },
   { label: "Parkir Mobil", value: "Parkir Mobil" },
 ];
@@ -168,24 +168,40 @@ export default function Dashboard({ notifOpenInitially = false }) {
         />
       </section>
 
-      {mapOpen && (
-        <div
-          role="dialog"
-          aria-label="Peta persebaran kos"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#000000cc] p-4"
-          onClick={() => setMapOpen(false)}
-        >
-          <div onClick={(e) => e.stopPropagation()} className="h-full max-h-[860px] w-full max-w-[1400px] overflow-hidden rounded-xl">
-            <KosMap kos={allKos.data || []} interactive className="h-full w-full" />
-          </div>
-          <button type="button" className="absolute right-6 top-6 z-[1000] rounded-full bg-white px-4 py-2 font-poppins text-sm shadow">
-            Tutup
-          </button>
-        </div>
-      )}
+      {/* Latar memudar, peta membesar dari tengah; saat ditutup keduanya dibalik */}
+      <AnimatePresence>
+        {mapOpen && (
+          <motion.div
+            role="dialog"
+            aria-label="Peta persebaran kos"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#000000cc] p-4"
+            onClick={() => setMapOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <motion.div
+              onClick={(e) => e.stopPropagation()}
+              className="h-full max-h-[860px] w-full max-w-[1400px] overflow-hidden rounded-xl"
+              initial={{ scale: 0.9, y: 40 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 40 }}
+              transition={{ type: "spring", stiffness: 260, damping: 26 }}
+            >
+              <KosMap kos={allKos.data || []} interactive className="h-full w-full" />
+            </motion.div>
+            <button type="button" className="absolute right-6 top-6 z-[1000] rounded-full bg-white px-4 py-2 font-poppins text-sm shadow">
+              Tutup
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ---------- Cari kos ---------- */}
-      <section id="cari-kos" className="relative px-4 pb-24 pt-[180px] sm:pt-[330px]">
+      {/* Tetesan cat (lebar penuh, rasio 1975x796, menjuntai 60% tingginya ≈ 24.2vw) ikut membesar
+          mengikuti lebar layar, jadi jarak atas juga pakai vw supaya judul selalu di bawah ujung tetesan */}
+      <section id="cari-kos" className="relative px-4 pb-24 pt-[max(180px,calc(24.5vw_+_72px))]">
         <h2 data-reveal="up" className="text-center font-serif4 text-[26px] text-black sm:text-[32px]">Temukan Kos yang Cocok Untukmu</h2>
         <p data-reveal="up" style={{ "--reveal-delay": "120ms" }} className="mx-auto mt-3 max-w-[1199px] text-center font-serif4 text-base text-black sm:text-xl">
           Cari dan bandingkan berbagai pilihan kos berdasarkan harga, tipe kos, fasilitas, dan lokasi sesuai kebutuhanmu.
@@ -202,11 +218,19 @@ export default function Dashboard({ notifOpenInitially = false }) {
                     type="button"
                     aria-pressed={type === t.value}
                     onClick={() => setType(t.value)}
-                    className={`h-6 w-[65px] rounded font-inter text-[11px] ${
-                      type === t.value ? "bg-white font-semibold text-black shadow-[0_1px_2px_#00000040]" : "text-[#555]"
+                    className={`relative h-6 w-[65px] rounded font-inter text-[11px] ${
+                      type === t.value ? "font-semibold text-black" : "text-[#555]"
                     }`}
                   >
-                    {t.label}
+                    {/* Satu latar putih yang meluncur ke tombol terpilih (layoutId yang sama) */}
+                    {type === t.value && (
+                      <motion.span
+                        layoutId="tipe-kos-aktif"
+                        className="absolute inset-0 rounded bg-white shadow-[0_1px_2px_#00000040]"
+                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                      />
+                    )}
+                    <span className="relative">{t.label}</span>
                   </button>
                 ))}
               </div>
@@ -244,28 +268,49 @@ export default function Dashboard({ notifOpenInitially = false }) {
                 {FACILITIES.map((f) => {
                   const on = facilities.includes(f.value);
                   return (
-                    <button
+                    <motion.button
                       key={f.value}
                       type="button"
                       aria-pressed={on}
                       onClick={() => toggleFacility(f.value)}
+                      whileTap={{ scale: 0.9 }}
                       className={`inline-flex h-[26px] items-center gap-1.5 rounded-full border px-[11px] font-inter text-[11px] ${
                         on ? "border-[#8f8f8f] bg-[#d9d9d9] text-black" : "border-[#8f8f8f] bg-white text-black"
                       }`}
                     >
-                      {on && <img src={checkIcon} alt="" className="h-[6px] w-2" />}
+                      {on && (
+                        <motion.img
+                          src={checkIcon}
+                          alt=""
+                          className="h-[6px] w-2"
+                          initial={{ scale: 0, rotate: -90 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                        />
+                      )}
                       {f.label}
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
-              <button
+              <motion.button
                 type="button"
                 onClick={() => setApplied({ type, maxPrice, facilities })}
+                whileTap={{ scale: 0.97 }}
                 className="mt-4 h-10 w-full max-w-[308px] rounded-md bg-black font-inter text-sm font-medium text-white hover:bg-[#222] md:ml-11"
               >
-                Apply Filters ({kosList.data ? kosList.data.length : 0} Kos)
-              </button>
+                Apply Filters (
+                {/* Angka baru turun masuk setiap jumlah hasil berubah */}
+                <motion.span
+                  key={kosList.data ? kosList.data.length : 0}
+                  className="inline-block"
+                  initial={{ y: -10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                >
+                  {kosList.data ? kosList.data.length : 0}
+                </motion.span>{" "}
+                Kos)
+              </motion.button>
             </div>
           </div>
 
@@ -303,18 +348,30 @@ export default function Dashboard({ notifOpenInitially = false }) {
               ›
             </button>
           )}
-        <div
+        {/* layoutScroll: Motion ikut menghitung posisi scroll slider saat kartu bergeser */}
+        <motion.div
           ref={sliderRef}
-          className="flex cursor-grab snap-x snap-mandatory gap-[38px] overflow-x-auto scroll-smooth scroll-px-1 px-1 pb-6 pt-2 [scrollbar-width:thin] select-none sm:scroll-px-4 sm:px-4"
+          layoutScroll
+          className="relative flex cursor-grab snap-x snap-mandatory gap-[38px] overflow-x-auto scroll-smooth scroll-px-1 px-1 pb-6 pt-2 [scrollbar-width:thin] select-none sm:scroll-px-4 sm:px-4"
         >
           {kosList.loading && <p className="font-roboto text-sm text-[#555]">Memuat kos...</p>}
           {kosList.error && <p className="font-roboto text-sm text-[#c00]">{kosList.error}</p>}
           {kosList.data?.length === 0 && (
             <p className="font-roboto text-sm text-[#555]">Tidak ada kos yang cocok. Coba ubah filter.</p>
           )}
+          {/* Saat hasil filter berubah: kartu yang hilang mengecil & memudar, kartu yang tersisa meluncur
+              ke posisi barunya. Kartu baru tetap muncul lewat data-reveal (CSS) di dalamnya. */}
+          <AnimatePresence mode="popLayout">
           {kosList.data?.map((kos, i) => (
-            <div key={kos.id} data-reveal="card" style={{ "--reveal-delay": `${Math.min(i, 4) * 120}ms` }} className="snap-start">
-              <SpotlightCard>
+            <motion.div
+              key={kos.id}
+              layout
+              initial={false}
+              exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.2 } }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="snap-start"
+            >
+            <div data-reveal="card" style={{ "--reveal-delay": `${Math.min(i, 4) * 120}ms` }}>
               <KosCard kos={kos}>
                 <div className="mt-3 flex items-center justify-center gap-[18px]">
                   <Link
@@ -333,10 +390,11 @@ export default function Dashboard({ notifOpenInitially = false }) {
                   </Link>
                 </div>
               </KosCard>
-              </SpotlightCard>
             </div>
+            </motion.div>
           ))}
-        </div>
+          </AnimatePresence>
+        </motion.div>
         </div>
       </section>
     </main>

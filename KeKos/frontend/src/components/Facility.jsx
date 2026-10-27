@@ -2,8 +2,9 @@ import wifiIcon from "../assets/wifi.svg";
 import snowIcon from "../assets/snow.svg";
 import showerIcon from "../assets/shower.svg";
 
-const ICONS = { wifi: wifiIcon, ac: snowIcon, "k. mandi dalam": showerIcon };
-const LABELS = { "k. mandi dalam": "K.mandi dalam" };
+// Kunci = nama_fasilitas dari database (huruf kecil)
+const ICONS = { wifi: wifiIcon, ac: snowIcon, "kamar mandi dalam": showerIcon, "k. mandi dalam": showerIcon };
+const LABELS = { "kamar mandi dalam": "K.mandi dalam", "k. mandi dalam": "K.mandi dalam" };
 
 // Satu fasilitas dengan ikon, contoh: Wifi, AC, K.mandi dalam
 // boxed = versi kotak bergaris (halaman detail & daftar kamar)

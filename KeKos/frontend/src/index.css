@@ -189,43 +189,8 @@ input:focus-visible {
   to { transform: none; opacity: 1; }
 }
 
-/* SpotlightCard: lingkaran cahaya di isi kartu + garis tepi yang menyala di dekat kursor */
-.kekos-spotlight {
-  position: relative;
-  border-radius: 10px;
-  transition: transform 0.25s ease;
-}
-.kekos-spotlight > article { height: 100%; }
-.kekos-spotlight::before,
-.kekos-spotlight::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  z-index: 2;
-}
-.kekos-spotlight::before {
-  inset: 3px;
-  border-radius: 8px;
-  background: radial-gradient(260px circle at var(--x, 50%) var(--y, 50%), #7d7fff3d, transparent 70%);
-}
-.kekos-spotlight::after {
-  inset: 0;
-  border-radius: 10px;
-  padding: 3px;
-  background: radial-gradient(220px circle at var(--x, 50%) var(--y, 50%), #7d7fff 35%, transparent 75%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-}
-.kekos-spotlight:hover { transform: translateY(-4px); }
-.kekos-spotlight:hover::before,
-.kekos-spotlight:hover::after { opacity: 1; }
-
 @media (prefers-reduced-motion: reduce) {
   .kekos-rotate [aria-hidden] > span { animation: none; }
-  .kekos-spotlight:hover { transform: none; }
 }
 
 /* Login pemilik kos (belum tersedia) terpental kembali ke form login */
